@@ -6,12 +6,11 @@ loadrt trivkins
 loadrt [EMCMOT]EMCMOT servo_period_nsec=[EMCMOT]SERVO_PERIOD num_joints=[TRAJ]AXES tp=tp kins=trivkins
 loadrt probe_parport
 loadrt hostmot2
-#loadrt hm2_eth config=" num_encoders=1 num_pwmgens=0 num_3pwmgens=0 num_stepgens=5 " # sserial_port_0=00xxxxxx " 
 loadrt hm2_eth board_ip="192.168.1.121" config="num_encoders=1 num_pwmgens=0 num_stepgens=3 sserial_port_0=00xxxx"
-
+loadrt pid names=pid.s
+loadrt near
 
 setp     hm2_7i76e.0.watchdog.timeout_ns 10000000
-
 addf hm2_7i76e.0.read servo-thread
 addf motion-command-handler servo-thread
 addf motion-controller servo-thread
@@ -19,7 +18,7 @@ addf hm2_7i76e.0.write         servo-thread
 addf hm2_7i76e.0.pet_watchdog  servo-thread
 
 # external output signals
-
+#net spindle-cw	  =>  hm2_7i76e.0.7i76.0.0.output-00
 
 # external input signals
 net x-home-sw     <=  hm2_7i76e.0.7i76.0.0.input-00
@@ -28,6 +27,7 @@ net z-home-sw     <=  hm2_7i76e.0.7i76.0.0.input-01
 #*******************
 #  AXIS X
 #*******************
+
 
 # Step Gen signals/setup
 
@@ -83,24 +83,93 @@ net z-pos-limit     =>  axis.2.pos-lim-sw-in
 #  SPINDLE S
 #*******************
 
+setp   pid.s.Pgain     [SPINDLE_9]P
+setp   pid.s.Igain     [SPINDLE_9]I
+setp   pid.s.Dgain     [SPINDLE_9]D
+setp   pid.s.bias      [SPINDLE_9]BIAS
+setp   pid.s.FF0       [SPINDLE_9]FF0
+setp   pid.s.FF1       [SPINDLE_9]FF1
+setp   pid.s.FF2       [SPINDLE_9]FF2
+setp   pid.s.deadband  [SPINDLE_9]DEADBAND
+setp   pid.s.maxoutput [SPINDLE_9]MAX_OUTPUT
+setp   pid.s.error-previous-target true
+
+net spindle-index-enable  <=> pid.s.index-enable
+net spindle-enable        =>  pid.s.enable
+net spindle-vel-cmd-rpm     => pid.s.command
+net spindle-vel-fb-rpm      => pid.s.feedback
+net spindle-output        <=  pid.s.output
+
+# ---Encoder feedback signals/setup---
+
+setp    hm2_7i76e.0.encoder.00.counter-mode 0
+setp    hm2_7i76e.0.encoder.00.filter 1
+setp    hm2_7i76e.0.encoder.00.index-invert 0
+setp    hm2_7i76e.0.encoder.00.index-mask 0
+setp    hm2_7i76e.0.encoder.00.index-mask-invert 0
+setp    hm2_7i76e.0.encoder.00.scale  [SPINDLE_9]ENCODER_SCALE
+
+net spindle-revs             <=   hm2_7i76e.0.encoder.00.position
+net spindle-vel-fb-rps       <=   hm2_7i76e.0.encoder.00.velocity
+net spindle-index-enable     <=>  hm2_7i76e.0.encoder.00.index-enable
+
 # ---setup spindle control signals---
 
 net spindle-vel-cmd-rps        <=  motion.spindle-speed-out-rps
 net spindle-vel-cmd-rps-abs    <=  motion.spindle-speed-out-rps-abs
-net spindle-vel-cmd            <=  motion.spindle-speed-out
-net spindle-vel-cmd-rpm-abs    <=  motion.spindle-speed-out-abs
-net spindle-on                 <=  motion.spindle-on
-net spindle-cw                 <=  motion.spindle-forward
+net spindle-vel-cmd-rpm        <=  motion.spindle-speed-out
+net spindle-vel-cmd-rpm-abs    <=  motion.spindle-speed-out-abs hm2_7i76e.0.7i76.0.0.spinout
+net spindle-enable             <=  motion.spindle-on hm2_7i76e.0.7i76.0.0.spinena
+net spindle-cw                 <=  motion.spindle-forward hm2_7i76e.0.7i76.0.0.output-00
 net spindle-ccw                <=  motion.spindle-reverse
 net spindle-brake              <=  motion.spindle-brake
 net spindle-revs               =>  motion.spindle-revs
 net spindle-at-speed           =>  motion.spindle-at-speed
-net spindle-vel-fb             =>  motion.spindle-speed-in
+net spindle-vel-fb-rps         =>  motion.spindle-speed-in
 net spindle-index-enable      <=>  motion.spindle-index-enable
 
 # ---Setup spindle at speed signals---
 
-sets spindle-at-speed true
+net spindle-vel-cmd-rps    =>  near.0.in1
+net spindle-vel-fb-rps         =>  near.0.in2
+net spindle-at-speed       <=  near.0.out
+setp near.0.scale 1.000000
+setp near.0.difference 3.333333
+
+############
+setp hm2_7i76e.0.7i76.0.0.spinout-scalemax 5000
+setp hm2_7i76e.0.7i76.0.0.spinout-maxlim 5000
+setp hm2_7i76e.0.7i76.0.0.spinout-minlim 0
+
+#setp	hm2_7i76e.0.encoder.00.counter-mode 0
+#setp	hm2_7i76e.0.encoder.00.filter 1
+#setp	hm2_7i76e.0.encoder.00.index-invert 0
+#setp	hm2_7i76e.0.encoder.00.index-mask 0
+#setp	hm2_7i76e.0.encoder.00.index-mask-invert 0
+#setp	hm2_7i76e.0.encoder.00.scale [SPINDLE_9]ENCODER_SCALE
+
+#net spindle-revs <= hm2_7i76e.0.encoder.00.position
+#net spindle-vel-fb-rps <= hm2_7i76e.0.encoder.00.velocity
+#net spindle-index-enable <=> hm2_7i76e.0.encoder.00.index-enable
+
+# ---setup spindle control signals---
+#net spindle-vel-cmd-rps        <=  motion.spindle-speed-out-rps
+#net spindle-vel-cmd-rps-abs    <=  motion.spindle-speed-out-rps-abs
+#net spindle-vel-cmd            <=  motion.spindle-speed-out
+#net spindle-vel-cmd-rpm-abs    <=  motion.spindle-speed-out-abs hm2_7i76e.0.7i76.0.0.spinout
+#net spindle-on                 <=  motion.spindle-on hm2_7i76e.0.7i76.0.0.spinena 
+#net spindle-cw                 <=  motion.spindle-forward
+#net spindle-ccw                <=  motion.spindle-reverse
+#net spindle-brake              <=  motion.spindle-brake
+#net spindle-revs               =>  motion.spindle-revs
+#net spindle-at-speed           =>  motion.spindle-at-speed
+#net spindle-vel-fb             =>  motion.spindle-speed-in
+#net spindle-index-enable      <=>  motion.spindle-index-enable
+
+# ---Setup spindle at speed signals---
+
+#sets spindle-at-speed true
+
 
 
 #******************************
