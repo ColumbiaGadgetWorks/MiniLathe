@@ -9,6 +9,7 @@ loadrt hostmot2
 loadrt hm2_eth board_ip="192.168.1.121" config="num_encoders=1 num_pwmgens=0 num_stepgens=3 sserial_port_0=00xxxx"
 loadrt pid names=pid.s
 loadrt near
+loadrt estop_latch
 
 setp     hm2_7i76e.0.watchdog.timeout_ns 10000000
 addf hm2_7i76e.0.read servo-thread
@@ -16,6 +17,7 @@ addf motion-command-handler servo-thread
 addf motion-controller servo-thread
 addf hm2_7i76e.0.write         servo-thread
 addf hm2_7i76e.0.pet_watchdog  servo-thread
+addf estop_latch.0 servo-thread
 
 # external output signals
 #net spindle-cw	  =>  hm2_7i76e.0.7i76.0.0.output-00
@@ -23,7 +25,8 @@ addf hm2_7i76e.0.pet_watchdog  servo-thread
 # external input signals
 net x-home-sw     <=  hm2_7i76e.0.7i76.0.0.input-00
 net z-home-sw     <=  hm2_7i76e.0.7i76.0.0.input-01
-
+#hm2_7i76e.0.7i76.0.0.input-02
+#net estop-out     <=  hm2_7i76e.0.7i76.0.0.input-03
 #*******************
 #  AXIS X
 #*******************
@@ -213,10 +216,17 @@ net machine-is-enabled        <=  motion.motion-enabled
 
 #  ---digital in / out signals---
 
+# estop
+net estop-loopout iocontrol.0.emc-enable-in <= estop_latch.0.ok-out
+net estop-loopin iocontrol.0.user-enable-out => estop_latch.0.ok-in
+net estop-reset iocontrol.0.user-request-enable => estop_latch.0.reset
+net remote-estop estop_latch.0.fault-in <= hm2_7i76e.0.7i76.0.0.input-03
+
+
 #  ---estop signals---
 
-net estop-out     <=  iocontrol.0.user-enable-out
-net estop-out     =>  iocontrol.0.emc-enable-in
+#net estop-out     <=  iocontrol.0.user-enable-out
+#net estop-out     =>  iocontrol.0.emc-enable-in
 
 #  ---manual tool change signals---
 
